@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Dashboard</title>
+
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 900px;
+            margin: 60px auto;
+            padding: 0 20px;
+            background: #111;
+            color: #eee;
+        }
+
+        .card {
+            background: #1c1c1c;
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        a {
+            color: #8ab4f8;
+        }
+
+        code {
+            background: #292929;
+            padding: 3px 6px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+
+        <h1>Bem-vindo, {{ user.name }}</h1>
+
+        <p>
+            Você está autenticado via Keycloak.
+        </p>
+
+        <hr>
+
+        <h2>Identidade</h2>
+
+        <p>
+            <strong>Username:</strong>
+            {{ user.preferred_username }}
+        </p>
+
+        <p>
+            <strong>Email:</strong>
+            {{ user.email }}
+        </p>
+
+        <p>
+            <strong>Subject:</strong>
+            <code>{{ user.sub }}</code>
+        </p>
+
+        <p>
+            <strong>Issuer:</strong>
+            <code>{{ user.iss }}</code>
+        </p>
+
+        <p>
+            <strong>Audience:</strong>
+            <code>{{ user.aud }}</code>
+        </p>
+
+        <hr>
+
+        <a href="/logout/">Logout</a>
+
+    </div>
+
+</body>
+</html>
