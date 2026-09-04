@@ -1,9 +1,12 @@
 import os
+import time
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from django.http import HttpResponse
 from django.test import SimpleTestCase, TestCase, override_settings
+from joserfc import jwt
+from joserfc.jwk import RSAKey
 
 from .access import (
     decode_jwt_payload_for_diagnostics,
@@ -11,6 +14,7 @@ from .access import (
     extract_roles,
     role_claim_diagnostics,
 )
+from .oidc import CLIENT_ID, ISSUER, verified_access_token_claims
 
 
 @override_settings(
@@ -67,6 +71,49 @@ class RoleResolutionTests(SimpleTestCase):
 
     def test_invalid_diagnostic_token_is_ignored(self):
         self.assertEqual(decode_jwt_payload_for_diagnostics("not-a-jwt"), {})
+
+    @patch("core.oidc.oauth.keycloak.fetch_jwk_set")
+    def test_verifies_roles_from_access_token(self, fetch_jwk_set):
+        key = RSAKey.generate_key(auto_kid=True)
+        fetch_jwk_set.return_value = {"keys": [key.as_dict(private=False)]}
+        encoded_token = jwt.encode(
+            {"alg": "RS256", "kid": key.kid},
+            {
+                "iss": ISSUER,
+                "sub": "user-123",
+                "azp": CLIENT_ID,
+                "exp": int(time.time()) + 300,
+                "resource_access": {
+                    CLIENT_ID: {"roles": ["pentester"]},
+                },
+            },
+            key,
+            algorithms=["RS256"],
+        )
+
+        claims = verified_access_token_claims({"access_token": encoded_token})
+
+        self.assertEqual(extract_roles(claims), ["pentester"])
+
+    @patch("core.oidc.oauth.keycloak.fetch_jwk_set")
+    def test_rejects_access_token_from_another_client(self, fetch_jwk_set):
+        key = RSAKey.generate_key(auto_kid=True)
+        fetch_jwk_set.return_value = {"keys": [key.as_dict(private=False)]}
+        encoded_token = jwt.encode(
+            {"alg": "RS256", "kid": key.kid},
+            {
+                "iss": ISSUER,
+                "sub": "user-123",
+                "azp": "another-client",
+                "aud": "account",
+                "exp": int(time.time()) + 300,
+            },
+            key,
+            algorithms=["RS256"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "not issued to this client"):
+            verified_access_token_claims({"access_token": encoded_token})
 
 
 @override_settings(
@@ -141,12 +188,14 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "Member")
 
     @override_settings(OIDC_LOG_ROLE_CLAIMS=False)
+    @patch("core.views.verified_access_token_claims")
     @patch("core.views.oauth.keycloak.userinfo")
     @patch("core.views.oauth.keycloak.authorize_access_token")
     def test_callback_stores_verified_roles(
         self,
         authorize_access_token,
         fetch_userinfo,
+        access_token_claims,
     ):
         authorize_access_token.return_value = {
             "id_token": "header.payload.signature",
@@ -164,13 +213,18 @@ class DashboardViewTests(TestCase):
                 "django": {"roles": ["manager"]},
             },
         }
+        access_token_claims.return_value = {
+            "resource_access": {
+                "django": {"roles": ["pentester"]},
+            },
+        }
 
         response = self.client.get("/auth/callback/")
 
         self.assertRedirects(response, "/", fetch_redirect_response=False)
         self.assertEqual(
             self.client.session["user"]["roles"],
-            ["viewer", "manager"],
+            ["viewer", "manager", "pentester"],
         )
         self.assertEqual(
             self.client.session["id_token"],

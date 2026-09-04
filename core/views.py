@@ -13,7 +13,13 @@ from .access import (
     keycloak_permission_required,
     token_role_diagnostics,
 )
-from .oidc import CLIENT_ID, PUBLIC_URL, REALM, oauth
+from .oidc import (
+    CLIENT_ID,
+    PUBLIC_URL,
+    REALM,
+    oauth,
+    verified_access_token_claims,
+)
 
 
 logger = logging.getLogger("core.oidc")
@@ -104,16 +110,18 @@ def callback(request):
     token = oauth.keycloak.authorize_access_token(request)
     id_token_claims = dict(token.get("userinfo") or {})
     endpoint_claims = dict(oauth.keycloak.userinfo(token=token))
+    access_token_claims = verified_access_token_claims(token)
 
     # Both sources are verified by Authlib/Keycloak. Keep a canonical roles
     # list so the rest of the application does not depend on token layout.
     userinfo = {**id_token_claims, **endpoint_claims}
     resolved_roles = extract_roles(id_token_claims, CLIENT_ID)
     seen_roles = {role.casefold() for role in resolved_roles}
-    for role in extract_roles(endpoint_claims, CLIENT_ID):
-        if role.casefold() not in seen_roles:
-            resolved_roles.append(role)
-            seen_roles.add(role.casefold())
+    for source in (endpoint_claims, access_token_claims):
+        for role in extract_roles(source, CLIENT_ID):
+            if role.casefold() not in seen_roles:
+                resolved_roles.append(role)
+                seen_roles.add(role.casefold())
     userinfo["roles"] = resolved_roles
     userinfo.setdefault("username", userinfo.get("preferred_username"))
 

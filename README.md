@@ -94,6 +94,10 @@ docker compose logs -f django
 Se uma role aparecer em `access_token`, mas não em `userinfo`, habilite **Add to
 userinfo** no mapper usado pelo client. Se aparecer no ID token, mas não no
 userinfo, confira também **Add to ID token** e a configuração do client scope.
+O backend também valida criptograficamente o access token contra o JWKS do
+realm e lê client roles em `resource_access["django-app"].roles`. Por padrão,
+somente assinaturas `RS256` são aceitas; algoritmos adicionais devem ser
+declarados explicitamente em `KEYCLOAK_SIGNING_ALGORITHMS`.
 
 Depois do login, o endpoint autenticado abaixo retorna apenas os dados de
 identidade necessários, as roles resolvidas e as permissões efetivas. Tokens
