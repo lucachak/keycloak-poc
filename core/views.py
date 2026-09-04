@@ -17,6 +17,12 @@ from .oidc import CLIENT_ID, PUBLIC_URL, REALM, oauth
 logger = logging.getLogger("core.oidc")
 
 
+def app_public_url(request, path):
+    if settings.APP_PUBLIC_URL:
+        return f"{settings.APP_PUBLIC_URL}/{path.lstrip('/')}"
+    return request.build_absolute_uri(path)
+
+
 def health(request):
     return JsonResponse({"status": "ok", "service": "django"})
 
@@ -85,7 +91,7 @@ def index(request):
 
 
 def login_view(request):
-    redirect_uri = request.build_absolute_uri("/auth/callback/")
+    redirect_uri = app_public_url(request, "/auth/callback/")
 
     return oauth.keycloak.authorize_redirect(
         request,
@@ -112,7 +118,7 @@ def logout_view(request):
 
     post_logout_redirect_uri = (
         settings.OIDC_POST_LOGOUT_REDIRECT_URI
-        or request.build_absolute_uri("/logged-out/")
+        or app_public_url(request, "/logged-out/")
     )
     params = {
         "post_logout_redirect_uri": post_logout_redirect_uri,

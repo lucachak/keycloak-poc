@@ -21,13 +21,31 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-0uj-(o!8m&ko$eh+4jb$j+e6@+v-xiaex^gc$@dht11w*f2!oy'
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-0uj-(o!8m&ko$eh+4jb$j+e6@+v-xiaex^gc$@dht11w*f2!oy',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() in {
+    '1', 'true', 'yes', 'on',
+}
 
-ALLOWED_HOSTS = ['*']
-OIDC_POST_LOGOUT_REDIRECT_URI = 'https://lucachak-keycloak.eastus.cloudapp.azure.com/'
+ALLOWED_HOSTS = os.environ.get(
+    'DJANGO_ALLOWED_HOSTS',
+    'localhost,127.0.0.1',
+).replace(',', ' ').split()
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    '',
+).replace(',', ' ').split()
+
+# Public origin of Django, without a trailing slash. Keeping this explicit
+# prevents an HTTPS reverse proxy from producing HTTP OIDC callback URLs.
+APP_PUBLIC_URL = os.environ.get('APP_PUBLIC_URL', '').rstrip('/')
+
+# The TLS terminator must forward X-Forwarded-Proto to Django.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Application definition
 

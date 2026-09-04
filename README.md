@@ -104,9 +104,27 @@ de confirmação e o usuário retorna para `/logged-out/`.
 No client `django-app`, configure em **Settings → Login settings**:
 
 ```text
-Valid post logout redirect URIs: http://localhost:8000/logged-out/
+Valid redirect URIs:
+https://lucachak-keycloak.eastus.cloudapp.azure.com/auth/callback/
+
+Valid post logout redirect URIs:
+https://lucachak-keycloak.eastus.cloudapp.azure.com/logged-out/
+
+Web origins:
+https://lucachak-keycloak.eastus.cloudapp.azure.com
 ```
 
 Para outros ambientes, cadastre a URL HTTPS correspondente. O valor precisa
 coincidir exatamente com `KEYCLOAK_POST_LOGOUT_REDIRECT_URI`. Se essa variável
 não for definida, a aplicação monta a URL usando o host da requisição.
+
+Na VM, a aplicação usa estas origens públicas por padrão:
+
+```text
+Django:   https://lucachak-keycloak.eastus.cloudapp.azure.com
+Keycloak: https://lucachak-keycloak.eastus.cloudapp.azure.com:8443
+```
+
+O proxy HTTPS do Django deve encaminhar `X-Forwarded-Proto: https`. Dentro da
+rede Docker, o Django acessa o Keycloak por `http://keycloak:8080`; somente o
+navegador usa a URL pública HTTPS na porta 8443.

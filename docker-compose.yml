@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
 
   keycloak:
@@ -11,7 +9,8 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
 
-      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME: "${KEYCLOAK_PUBLIC_URL:-https://lucachak-keycloak.eastus.cloudapp.azure.com:8443}"
+      KC_PROXY_HEADERS: "xforwarded"
       KC_HTTP_ENABLED: "true"
 
     ports:
@@ -30,15 +29,18 @@ services:
       - "8000:8000"
 
     environment:
-      KEYCLOAK_PUBLIC_URL: "http://localhost:8081"
-      KEYCLOAK_INTERNAL_URL: "http://host.docker.internal:8081"
-      KEYCLOAK_REALM: "lab"
-      KEYCLOAK_CLIENT_ID: "django-app"
+      APP_PUBLIC_URL: "${APP_PUBLIC_URL:-https://lucachak-keycloak.eastus.cloudapp.azure.com}"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-lucachak-keycloak.eastus.cloudapp.azure.com,localhost,127.0.0.1}"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-https://lucachak-keycloak.eastus.cloudapp.azure.com}"
+      # Keep true while using Django's development runserver (it serves static
+      # files). Set false after placing static files behind Caddy/WhiteNoise.
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
+      KEYCLOAK_PUBLIC_URL: "${KEYCLOAK_PUBLIC_URL:-https://lucachak-keycloak.eastus.cloudapp.azure.com:8443}"
+      KEYCLOAK_INTERNAL_URL: "${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}"
+      KEYCLOAK_REALM: "${KEYCLOAK_REALM:-lab}"
+      KEYCLOAK_CLIENT_ID: "${KEYCLOAK_CLIENT_ID:-django-app}"
       KEYCLOAK_CLIENT_SECRET: "${KEYCLOAK_CLIENT_SECRET}"
-      KEYCLOAK_POST_LOGOUT_REDIRECT_URI: "http://localhost:8000/logged-out/"
-
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      KEYCLOAK_POST_LOGOUT_REDIRECT_URI: "${KEYCLOAK_POST_LOGOUT_REDIRECT_URI:-https://lucachak-keycloak.eastus.cloudapp.azure.com/logged-out/}"
 
     depends_on:
       - keycloak

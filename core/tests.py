@@ -2,6 +2,7 @@ import os
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+from django.http import HttpResponse
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from .access import (
@@ -54,7 +55,10 @@ class RoleResolutionTests(SimpleTestCase):
         self.assertEqual(decode_jwt_payload_for_diagnostics("not-a-jwt"), {})
 
 
-@override_settings(OIDC_POST_LOGOUT_REDIRECT_URI=None)
+@override_settings(
+    APP_PUBLIC_URL="",
+    OIDC_POST_LOGOUT_REDIRECT_URI=None,
+)
 class DashboardViewTests(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -66,16 +70,38 @@ class DashboardViewTests(TestCase):
             "KEYCLOAK_CLIENT_SECRET": "test-secret",
         })
         cls.env.start()
+        cls.public_url = patch("core.views.PUBLIC_URL", "http://localhost:8080")
+        cls.realm = patch("core.views.REALM", "demo")
+        cls.client_id = patch("core.views.CLIENT_ID", "django")
+        cls.public_url.start()
+        cls.realm.start()
+        cls.client_id.start()
         super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
+        cls.client_id.stop()
+        cls.realm.stop()
+        cls.public_url.stop()
         cls.env.stop()
 
     def test_anonymous_user_is_redirected_to_login(self):
         response = self.client.get("/")
         self.assertRedirects(response, "/login/", fetch_redirect_response=False)
+
+    @override_settings(APP_PUBLIC_URL="https://app.example.com")
+    def test_login_uses_configured_public_callback_uri(self):
+        with patch("core.views.oauth.keycloak.authorize_redirect") as authorize:
+            authorize.return_value = HttpResponse(status=302)
+
+            response = self.client.get("/login/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            authorize.call_args.args[1],
+            "https://app.example.com/auth/callback/",
+        )
 
     def test_authenticated_user_sees_oidc_dashboard(self):
         session = self.client.session
@@ -133,11 +159,11 @@ class DashboardViewTests(TestCase):
         query = parse_qs(redirect_url.query)
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(redirect_url.netloc, "localhost:8081")
-        self.assertTrue(redirect_url.path.startswith("/realms/lab/"))
+        self.assertEqual(redirect_url.netloc, "localhost:8080")
+        self.assertTrue(redirect_url.path.startswith("/realms/demo/"))
         self.assertTrue(redirect_url.path.endswith("/protocol/openid-connect/logout"))
         self.assertEqual(query["id_token_hint"], ["header.payload.signature"])
-        self.assertEqual(query["client_id"], ["django-app"])
+        self.assertEqual(query["client_id"], ["django"])
         self.assertEqual(query["post_logout_redirect_uri"], ["http://testserver/logged-out/"])
         self.assertNotIn("user", self.client.session)
 
@@ -150,7 +176,7 @@ class DashboardViewTests(TestCase):
         query = parse_qs(urlparse(response.url).query)
 
         self.assertNotIn("id_token_hint", query)
-        self.assertEqual(query["client_id"], ["django-app"])
+        self.assertEqual(query["client_id"], ["django"])
 
     @override_settings(
         OIDC_POST_LOGOUT_REDIRECT_URI="https://app.example.com/logged-out/",
