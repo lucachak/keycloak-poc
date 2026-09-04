@@ -3,11 +3,13 @@ import logging
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
+import requests
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
+from joserfc.errors import JoseError
 
 from .access import (
     access_summary,
@@ -22,6 +24,7 @@ from .oidc import (
     PUBLIC_URL,
     REALM,
     oauth,
+    refresh_keycloak_token,
     verified_access_token_claims,
 )
 
@@ -98,6 +101,35 @@ def available_role_areas(claims):
         for slug, definition in ROLE_DASHBOARDS.items()
         if slug in assigned
     ]
+
+
+def merge_identity_claims(identity_sources, entitlement_sources, base=None):
+    """Build session identity while replacing, not accumulating, entitlements."""
+    userinfo = dict(base or {})
+    userinfo.pop("roles", None)
+    userinfo.pop("groups", None)
+
+    for source in identity_sources:
+        userinfo.update(source or {})
+
+    resolved_roles = []
+    seen_roles = set()
+    resolved_groups = []
+    seen_groups = set()
+    for source in entitlement_sources:
+        for role in extract_roles(source, CLIENT_ID):
+            if role.casefold() not in seen_roles:
+                resolved_roles.append(role)
+                seen_roles.add(role.casefold())
+        for group in extract_groups(source):
+            if group.casefold() not in seen_groups:
+                resolved_groups.append(group)
+                seen_groups.add(group.casefold())
+
+    userinfo["roles"] = resolved_roles
+    userinfo["groups"] = resolved_groups
+    userinfo.setdefault("username", userinfo.get("preferred_username"))
+    return userinfo
 
 
 @never_cache
@@ -180,26 +212,12 @@ def callback(request):
     endpoint_claims = dict(oauth.keycloak.userinfo(token=token))
     access_token_claims = verified_access_token_claims(token)
 
-    # Both sources are verified by Authlib/Keycloak. Keep a canonical roles
-    # list so the rest of the application does not depend on token layout.
-    userinfo = {**id_token_claims, **endpoint_claims}
-    resolved_roles = extract_roles(id_token_claims, CLIENT_ID)
-    seen_roles = {role.casefold() for role in resolved_roles}
-    for source in (endpoint_claims, access_token_claims):
-        for role in extract_roles(source, CLIENT_ID):
-            if role.casefold() not in seen_roles:
-                resolved_roles.append(role)
-                seen_roles.add(role.casefold())
-    userinfo["roles"] = resolved_roles
-    resolved_groups = []
-    seen_groups = set()
-    for source in (id_token_claims, endpoint_claims, access_token_claims):
-        for group in extract_groups(source):
-            if group.casefold() not in seen_groups:
-                resolved_groups.append(group)
-                seen_groups.add(group.casefold())
-    userinfo["groups"] = resolved_groups
-    userinfo.setdefault("username", userinfo.get("preferred_username"))
+    # Both sources are verified by Authlib/Keycloak. Keep canonical role/group
+    # lists so the rest of the application does not depend on token layout.
+    userinfo = merge_identity_claims(
+        (id_token_claims, endpoint_claims),
+        (id_token_claims, endpoint_claims, access_token_claims),
+    )
 
     if settings.OIDC_LOG_ROLE_CLAIMS:
         diagnostic_token = {**token, "userinfo": endpoint_claims}
@@ -216,6 +234,8 @@ def callback(request):
     request.session.cycle_key()
     request.session["user"] = userinfo
     request.session["authenticated_at"] = datetime.now(timezone.utc).isoformat()
+    if token.get("refresh_token"):
+        request.session["refresh_token"] = token["refresh_token"]
 
     # necessário para RP-Initiated Logout
     if token.get("id_token"):
@@ -324,6 +344,64 @@ def current_user(request):
         "permissions": [
             permission["code"] for permission in access["permissions"]
         ],
+    })
+
+
+@never_cache
+@require_POST
+def sync_identity(request):
+    current_claims = request.session.get("user")
+    refresh_token = request.session.get("refresh_token")
+    if not current_claims:
+        return JsonResponse({"detail": "Não autenticado."}, status=401)
+    if not refresh_token:
+        return JsonResponse({
+            "detail": "Sessão sem refresh token; faça login novamente.",
+        }, status=409)
+
+    try:
+        token = refresh_keycloak_token(refresh_token)
+        access_token_claims = verified_access_token_claims(token)
+        endpoint_claims = dict(oauth.keycloak.userinfo(token=token))
+    except requests.HTTPError as error:
+        status_code = getattr(error.response, "status_code", None)
+        logger.warning("Keycloak recusou a sincronização OIDC: HTTP %s", status_code)
+        if status_code in {400, 401}:
+            request.session.flush()
+            return JsonResponse({"detail": "Sessão expirada."}, status=401)
+        return JsonResponse({"detail": "Não foi possível sincronizar."}, status=502)
+    except (requests.RequestException, JoseError, ValueError) as error:
+        logger.warning("Falha ao sincronizar identidade OIDC: %s", error)
+        return JsonResponse({"detail": "Não foi possível sincronizar."}, status=502)
+
+    if access_token_claims.get("sub") != current_claims.get("sub"):
+        logger.error("Refresh token retornou uma identidade diferente da sessão.")
+        request.session.flush()
+        return JsonResponse({"detail": "Sessão inválida."}, status=401)
+
+    updated_claims = merge_identity_claims(
+        (endpoint_claims,),
+        (endpoint_claims, access_token_claims),
+        base=current_claims,
+    )
+    old_roles = extract_roles(current_claims, CLIENT_ID)
+    old_groups = extract_groups(current_claims)
+    new_roles = extract_roles(updated_claims, CLIENT_ID)
+    new_groups = extract_groups(updated_claims)
+    changed = old_roles != new_roles or old_groups != new_groups
+
+    request.session["user"] = updated_claims
+    request.session["refresh_token"] = token.get("refresh_token", refresh_token)
+    if token.get("id_token"):
+        request.session["id_token"] = token["id_token"]
+    request.session["roles_synced_at"] = datetime.now(timezone.utc).isoformat()
+
+    access = access_summary(updated_claims)
+    return JsonResponse({
+        "changed": changed,
+        "roles": new_roles,
+        "groups": new_groups,
+        "permissions": [item["code"] for item in access["permissions"]],
     })
 
 

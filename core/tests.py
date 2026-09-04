@@ -3,6 +3,7 @@ import time
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+import requests
 from django.http import HttpResponse
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from joserfc import jwt
@@ -199,6 +200,7 @@ class DashboardViewTests(TestCase):
     ):
         authorize_access_token.return_value = {
             "id_token": "header.payload.signature",
+            "refresh_token": "refresh-token",
             "userinfo": {
                 "sub": "user-123",
                 "preferred_username": "lucas",
@@ -236,6 +238,7 @@ class DashboardViewTests(TestCase):
             self.client.session["id_token"],
             "header.payload.signature",
         )
+        self.assertEqual(self.client.session["refresh_token"], "refresh-token")
 
     def test_current_user_api_returns_roles_and_permissions(self):
         session = self.client.session
@@ -261,6 +264,82 @@ class DashboardViewTests(TestCase):
         response = self.client.get("/api/me/")
 
         self.assertEqual(response.status_code, 401)
+
+    @override_settings(OIDC_LOG_ROLE_CLAIMS=False)
+    @patch("core.views.oauth.keycloak.userinfo")
+    @patch("core.views.verified_access_token_claims")
+    @patch("core.views.refresh_keycloak_token")
+    def test_sync_identity_updates_roles_and_groups(
+        self,
+        refresh_token,
+        access_token_claims,
+        fetch_userinfo,
+    ):
+        session = self.client.session
+        session["user"] = {
+            "sub": "user-123",
+            "preferred_username": "lucas",
+            "roles": ["viewer"],
+            "groups": ["/readers"],
+        }
+        session["refresh_token"] = "old-refresh-token"
+        session.save()
+        refresh_token.return_value = {
+            "access_token": "new-access-token",
+            "refresh_token": "new-refresh-token",
+            "id_token": "new-id-token",
+        }
+        access_token_claims.return_value = {
+            "sub": "user-123",
+            "resource_access": {
+                "django": {"roles": ["pentester", "admin"]},
+            },
+            "groups": ["/security"],
+        }
+        fetch_userinfo.return_value = {
+            "sub": "user-123",
+            "preferred_username": "lucas",
+        }
+
+        response = self.client.post("/api/session/sync/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["changed"])
+        self.assertEqual(response.json()["roles"], ["pentester", "admin"])
+        self.assertEqual(response.json()["groups"], ["/security"])
+        self.assertEqual(
+            self.client.session["refresh_token"],
+            "new-refresh-token",
+        )
+        self.assertEqual(self.client.session["id_token"], "new-id-token")
+
+    def test_sync_identity_requires_refresh_token(self):
+        session = self.client.session
+        session["user"] = {
+            "sub": "user-123",
+            "preferred_username": "lucas",
+            "roles": ["viewer"],
+        }
+        session.save()
+
+        response = self.client.post("/api/session/sync/")
+
+        self.assertEqual(response.status_code, 409)
+
+    @patch("core.views.refresh_keycloak_token")
+    def test_sync_identity_clears_expired_session(self, refresh_token):
+        session = self.client.session
+        session["user"] = {"sub": "user-123", "roles": ["viewer"]}
+        session["refresh_token"] = "expired-refresh-token"
+        session.save()
+        http_response = requests.Response()
+        http_response.status_code = 400
+        refresh_token.side_effect = requests.HTTPError(response=http_response)
+
+        response = self.client.post("/api/session/sync/")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("user", self.client.session)
 
     def test_user_can_open_each_assigned_role_dashboard(self):
         session = self.client.session

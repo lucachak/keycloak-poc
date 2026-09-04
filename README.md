@@ -67,6 +67,12 @@ Cada rota também valida a role no backend; esconder o link no menu não é usad
 como mecanismo de autorização. Os grupos normalizados aparecem em `/api/me/` e
 no painel de contexto das páginas.
 
+Enquanto uma dashboard estiver aberta, o navegador chama
+`POST /api/session/sync/` a cada 15 segundos. O Django usa o refresh token
+guardado na sessão do servidor para obter claims atualizados; quando roles ou
+grupos mudam no Keycloak, a página é recarregada com os novos acessos. Nenhum
+token OIDC é enviado ao JavaScript.
+
 ## Executando
 
 ```bash

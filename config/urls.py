@@ -17,6 +17,7 @@ urlpatterns = [
     path("dashboards/pentester/", views.pentester_dashboard),
     path("dashboards/admin/", views.admin_dashboard),
     path("api/me/", views.current_user),
+    path("api/session/sync/", views.sync_identity),
     path("api/reports/export/", views.export_report),
     path("health/", views.health),
     ]
