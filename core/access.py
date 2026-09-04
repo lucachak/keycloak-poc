@@ -46,6 +46,10 @@ DEFAULT_ROLE_PERMISSIONS = {
     "member": {"dashboard.view", "profile.view"},
     "viewer": {"dashboard.view", "profile.view", "activity.view"},
     "analyst": {"dashboard.view", "profile.view", "activity.view", "reports.view"},
+    "pentester": {
+        "dashboard.view", "profile.view", "activity.view",
+        "reports.view", "reports.export",
+    },
     "manager": {
         "dashboard.view", "profile.view", "activity.view",
         "reports.view", "reports.export",

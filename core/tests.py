@@ -26,6 +26,20 @@ class RoleResolutionTests(SimpleTestCase):
         self.assertIn("dashboard.view", permissions)
         self.assertIn("reports.export", permissions)
 
+    def test_pentester_can_access_reports_but_not_manage_users(self):
+        permissions = effective_permissions({"roles": ["pentester"]})
+
+        self.assertIn("dashboard.view", permissions)
+        self.assertIn("reports.view", permissions)
+        self.assertIn("reports.export", permissions)
+        self.assertNotIn("users.manage", permissions)
+
+    def test_admin_receives_every_catalog_permission(self):
+        permissions = effective_permissions({"roles": ["admin"]})
+
+        self.assertIn("reports.export", permissions)
+        self.assertIn("users.manage", permissions)
+
     def test_combines_keycloak_realm_and_current_client_roles(self):
         claims = {
             "realm_access": {"roles": ["viewer", "offline_access"]},
@@ -125,6 +139,66 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "Keycloak")
         self.assertContains(response, "Centro de atividades")
         self.assertContains(response, "Member")
+
+    @override_settings(OIDC_LOG_ROLE_CLAIMS=False)
+    @patch("core.views.oauth.keycloak.userinfo")
+    @patch("core.views.oauth.keycloak.authorize_access_token")
+    def test_callback_stores_verified_roles(
+        self,
+        authorize_access_token,
+        fetch_userinfo,
+    ):
+        authorize_access_token.return_value = {
+            "id_token": "header.payload.signature",
+            "userinfo": {
+                "sub": "user-123",
+                "preferred_username": "lucas",
+                "realm_access": {"roles": ["viewer"]},
+            },
+        }
+        fetch_userinfo.return_value = {
+            "sub": "user-123",
+            "preferred_username": "lucas",
+            "email": "lucas@example.com",
+            "resource_access": {
+                "django": {"roles": ["manager"]},
+            },
+        }
+
+        response = self.client.get("/auth/callback/")
+
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
+        self.assertEqual(
+            self.client.session["user"]["roles"],
+            ["viewer", "manager"],
+        )
+        self.assertEqual(
+            self.client.session["id_token"],
+            "header.payload.signature",
+        )
+
+    def test_current_user_api_returns_roles_and_permissions(self):
+        session = self.client.session
+        session["user"] = {
+            "sub": "user-123",
+            "preferred_username": "lucas",
+            "email": "lucas@example.com",
+            "resource_access": {
+                "django-app": {"roles": ["manager"]},
+            },
+        }
+        session.save()
+
+        response = self.client.get("/api/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["roles"], ["manager"])
+        self.assertIn("reports.export", response.json()["permissions"])
+
+    def test_current_user_api_requires_authentication(self):
+        response = self.client.get("/api/me/")
+
+        self.assertEqual(response.status_code, 401)
 
     def test_export_requires_reports_export_permission(self):
         session = self.client.session

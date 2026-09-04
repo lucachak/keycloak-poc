@@ -31,6 +31,13 @@ RBAC_ROLE_PERMISSIONS = {
 Uma role desconhecida aparece na tela para diagnóstico, mas não concede nenhuma
 permissão até ser mapeada explicitamente.
 
+As roles Keycloak usadas neste ambiente possuem os seguintes níveis:
+
+- `viewer`: dashboard, perfil e atividades;
+- `analyst`: acessos de viewer e visualização de relatórios;
+- `pentester`: acessos de analyst e exportação de relatórios;
+- `admin`: todas as permissões, incluindo gerenciamento de usuários.
+
 ## Protegendo uma view
 
 ```python
@@ -87,6 +94,25 @@ docker compose logs -f django
 Se uma role aparecer em `access_token`, mas não em `userinfo`, habilite **Add to
 userinfo** no mapper usado pelo client. Se aparecer no ID token, mas não no
 userinfo, confira também **Add to ID token** e a configuração do client scope.
+
+Depois do login, o endpoint autenticado abaixo retorna apenas os dados de
+identidade necessários, as roles resolvidas e as permissões efetivas. Tokens
+OIDC nunca são devolvidos pela API:
+
+```bash
+curl --cookie "sessionid=<sessao-django>" \
+  https://lucachak-keycloak.eastus.cloudapp.azure.com/api/me/
+```
+
+Exemplo:
+
+```json
+{
+  "user": {"username": "lucas", "email": "lucas@example.com"},
+  "roles": ["manager"],
+  "permissions": ["dashboard.view", "reports.export"]
+}
+```
 
 O diagnóstico é habilitado automaticamente quando `DEBUG=True`. Em outros
 ambientes, ele pode ser controlado explicitamente:

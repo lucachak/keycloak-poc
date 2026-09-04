@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -8,6 +9,7 @@ from django.shortcuts import redirect, render
 
 from .access import (
     access_summary,
+    extract_roles,
     keycloak_permission_required,
     token_role_diagnostics,
 )
@@ -100,8 +102,32 @@ def login_view(request):
 
 def callback(request):
     token = oauth.keycloak.authorize_access_token(request)
-    userinfo = dict(token["userinfo"])
+    id_token_claims = dict(token.get("userinfo") or {})
+    endpoint_claims = dict(oauth.keycloak.userinfo(token=token))
+
+    # Both sources are verified by Authlib/Keycloak. Keep a canonical roles
+    # list so the rest of the application does not depend on token layout.
+    userinfo = {**id_token_claims, **endpoint_claims}
+    resolved_roles = extract_roles(id_token_claims, CLIENT_ID)
+    seen_roles = {role.casefold() for role in resolved_roles}
+    for role in extract_roles(endpoint_claims, CLIENT_ID):
+        if role.casefold() not in seen_roles:
+            resolved_roles.append(role)
+            seen_roles.add(role.casefold())
+    userinfo["roles"] = resolved_roles
     userinfo.setdefault("username", userinfo.get("preferred_username"))
+
+    if settings.OIDC_LOG_ROLE_CLAIMS:
+        diagnostic_token = {**token, "userinfo": endpoint_claims}
+        logger.info(
+            "OIDC roles recebidas:\n%s",
+            json.dumps(
+                token_role_diagnostics(diagnostic_token, CLIENT_ID),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ),
+        )
 
     request.session.cycle_key()
     request.session["user"] = userinfo
@@ -112,6 +138,7 @@ def callback(request):
         request.session["id_token"] = token["id_token"]
 
     return redirect("/")
+
 
 def logout_view(request):
     id_token = request.session.get("id_token")
@@ -144,6 +171,26 @@ def logout_view(request):
 def logged_out(request):
     request.session.flush()
     return render(request, "core/logged_out.html")
+
+
+def current_user(request):
+    claims = request.session.get("user")
+    if not claims:
+        return JsonResponse({"detail": "Não autenticado."}, status=401)
+
+    access = access_summary(claims)
+    return JsonResponse({
+        "user": {
+            "sub": claims.get("sub"),
+            "username": claims.get("preferred_username") or claims.get("username"),
+            "name": claims.get("name"),
+            "email": claims.get("email"),
+        },
+        "roles": [role["name"] for role in access["roles"]],
+        "permissions": [
+            permission["code"] for permission in access["permissions"]
+        ],
+    })
 
 
 @keycloak_permission_required("reports.export")
