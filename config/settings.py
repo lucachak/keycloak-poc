@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-0uj-(o!8m&ko$eh+4jb$j+e6@+v-xiaex^gc$@dht11w*f2!oy
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-
+OIDC_POST_LOGOUT_REDIRECT_URI = 'https://lucachak-keycloak.eastus.cloudapp.azure.com/'
 
 # Application definition
 
