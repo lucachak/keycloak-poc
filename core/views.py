@@ -6,11 +6,15 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 
 from .access import (
     access_summary,
+    extract_groups,
     extract_roles,
     keycloak_permission_required,
+    keycloak_role_required,
     token_role_diagnostics,
 )
 from .oidc import (
@@ -25,6 +29,54 @@ from .oidc import (
 logger = logging.getLogger("core.oidc")
 
 
+ROLE_DASHBOARDS = {
+    "viewer": {
+        "label": "Viewer",
+        "kicker": "Leitura e acompanhamento",
+        "description": "Uma visão objetiva da identidade, dos acessos e das atividades disponíveis para consulta.",
+        "accent": "blue",
+        "sections": [
+            {"title": "Visão geral", "description": "Consulte o estado atual da conta e da sessão autenticada.", "permission": "dashboard.view"},
+            {"title": "Perfil", "description": "Visualize os dados sincronizados pelo Keycloak.", "permission": "profile.view"},
+            {"title": "Atividades", "description": "Acompanhe os eventos recentes associados ao workspace.", "permission": "activity.view"},
+        ],
+    },
+    "analyst": {
+        "label": "Analyst",
+        "kicker": "Análise e inteligência",
+        "description": "Espaço para consultar relatórios, acompanhar tendências e transformar dados de acesso em contexto.",
+        "accent": "violet",
+        "sections": [
+            {"title": "Painel analítico", "description": "Organize indicadores e leituras relevantes para a operação.", "permission": "dashboard.view"},
+            {"title": "Relatórios", "description": "Consulte os relatórios disponibilizados para análise.", "permission": "reports.view"},
+            {"title": "Trilha de atividades", "description": "Correlacione eventos recentes para apoiar investigações.", "permission": "activity.view"},
+        ],
+    },
+    "pentester": {
+        "label": "Pentester",
+        "kicker": "Security workspace",
+        "description": "Área técnica para organizar evidências, revisar superfícies autorizadas e exportar resultados.",
+        "accent": "amber",
+        "sections": [
+            {"title": "Escopo autorizado", "description": "Centralize os recursos liberados para as avaliações de segurança.", "permission": "dashboard.view"},
+            {"title": "Evidências", "description": "Consulte achados e informações de suporte aos testes.", "permission": "reports.view"},
+            {"title": "Exportações", "description": "Exporte o resumo de acessos para documentação e auditoria.", "permission": "reports.export"},
+        ],
+    },
+    "admin": {
+        "label": "Admin",
+        "kicker": "Governança e administração",
+        "description": "Controle central de usuários, roles, permissões e integridade do ambiente autenticado.",
+        "accent": "rose",
+        "sections": [
+            {"title": "Usuários", "description": "Administre identidades e acompanhe os acessos concedidos.", "permission": "users.manage"},
+            {"title": "Governança de roles", "description": "Revise como roles se transformam em permissões efetivas.", "permission": "users.manage"},
+            {"title": "Auditoria", "description": "Acompanhe atividades e eventos relevantes do workspace.", "permission": "activity.view"},
+        ],
+    },
+}
+
+
 def app_public_url(request, path):
     if settings.APP_PUBLIC_URL:
         return f"{settings.APP_PUBLIC_URL}/{path.lstrip('/')}"
@@ -35,6 +87,20 @@ def health(request):
     return JsonResponse({"status": "ok", "service": "django"})
 
 
+def available_role_areas(claims):
+    assigned = {role.casefold() for role in extract_roles(claims)}
+    return [
+        {
+            "slug": slug,
+            "url": f"/dashboards/{slug}/",
+            **definition,
+        }
+        for slug, definition in ROLE_DASHBOARDS.items()
+        if slug in assigned
+    ]
+
+
+@never_cache
 def index(request):
     user = request.session.get("user")
 
@@ -62,6 +128,8 @@ def index(request):
         "user": user,
         "roles": visible_roles or ["Sem role"],
         "access": access,
+        "groups": extract_groups(user),
+        "role_areas": available_role_areas(user),
         "last_login": last_login,
         "keycloak_account_url": f"{PUBLIC_URL}/realms/{REALM}/account/",
         "keycloak_realm": REALM,
@@ -123,6 +191,14 @@ def callback(request):
                 resolved_roles.append(role)
                 seen_roles.add(role.casefold())
     userinfo["roles"] = resolved_roles
+    resolved_groups = []
+    seen_groups = set()
+    for source in (id_token_claims, endpoint_claims, access_token_claims):
+        for group in extract_groups(source):
+            if group.casefold() not in seen_groups:
+                resolved_groups.append(group)
+                seen_groups.add(group.casefold())
+    userinfo["groups"] = resolved_groups
     userinfo.setdefault("username", userinfo.get("preferred_username"))
 
     if settings.OIDC_LOG_ROLE_CLAIMS:
@@ -148,6 +224,7 @@ def callback(request):
     return redirect("/")
 
 
+@require_POST
 def logout_view(request):
     id_token = request.session.get("id_token")
 
@@ -181,6 +258,54 @@ def logged_out(request):
     return render(request, "core/logged_out.html")
 
 
+def render_role_dashboard(request, role):
+    claims = dict(request.session["user"])
+    claims.setdefault("username", claims.get("preferred_username"))
+    access = access_summary(claims)
+    definition = ROLE_DASHBOARDS[role]
+    effective_codes = {
+        permission["code"] for permission in access["permissions"]
+    }
+    sections = [
+        {**section, "enabled": section["permission"] in effective_codes}
+        for section in definition["sections"]
+    ]
+    return render(request, "core/role_dashboard.html", {
+        "user": claims,
+        "role_slug": role,
+        "role_dashboard": {**definition, "sections": sections},
+        "role_areas": available_role_areas(claims),
+        "access": access,
+        "groups": extract_groups(claims),
+        "keycloak_account_url": f"{PUBLIC_URL}/realms/{REALM}/account/",
+    })
+
+
+@never_cache
+@keycloak_role_required("viewer")
+def viewer_dashboard(request):
+    return render_role_dashboard(request, "viewer")
+
+
+@never_cache
+@keycloak_role_required("analyst")
+def analyst_dashboard(request):
+    return render_role_dashboard(request, "analyst")
+
+
+@never_cache
+@keycloak_role_required("pentester")
+def pentester_dashboard(request):
+    return render_role_dashboard(request, "pentester")
+
+
+@never_cache
+@keycloak_role_required("admin")
+def admin_dashboard(request):
+    return render_role_dashboard(request, "admin")
+
+
+@never_cache
 def current_user(request):
     claims = request.session.get("user")
     if not claims:
@@ -195,6 +320,7 @@ def current_user(request):
             "email": claims.get("email"),
         },
         "roles": [role["name"] for role in access["roles"]],
+        "groups": extract_groups(claims),
         "permissions": [
             permission["code"] for permission in access["permissions"]
         ],

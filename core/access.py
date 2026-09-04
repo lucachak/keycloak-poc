@@ -103,6 +103,16 @@ def extract_roles(claims, client_id=None):
     return list(unique_roles.values())
 
 
+def extract_groups(claims):
+    """Return normalized group paths received from the identity provider."""
+    unique_groups = {}
+    for group in _as_role_list((claims or {}).get("groups")):
+        clean_group = group.strip()
+        if clean_group:
+            unique_groups.setdefault(clean_group.casefold(), clean_group)
+    return list(unique_groups.values())
+
+
 def role_permissions():
     configured = getattr(settings, "RBAC_ROLE_PERMISSIONS", {})
     merged = {role: set(permissions) for role, permissions in DEFAULT_ROLE_PERMISSIONS.items()}
@@ -225,6 +235,24 @@ def keycloak_permission_required(permission):
                 return redirect("/login/")
             if not has_permission(claims, permission):
                 return HttpResponseForbidden("Você não possui permissão para esta ação.")
+            return view_function(request, *args, **kwargs)
+        return wrapped
+    return decorator
+
+
+def keycloak_role_required(required_role):
+    """Protect a view with an exact application role from verified claims."""
+    def decorator(view_function):
+        @wraps(view_function)
+        def wrapped(request, *args, **kwargs):
+            claims = request.session.get("user")
+            if not claims:
+                return redirect("/login/")
+            roles = {role.casefold() for role in extract_roles(claims)}
+            if required_role.casefold() not in roles:
+                return HttpResponseForbidden(
+                    f"A role {required_role} é necessária para acessar esta área."
+                )
             return view_function(request, *args, **kwargs)
         return wrapped
     return decorator

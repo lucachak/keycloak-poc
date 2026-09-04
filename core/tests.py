@@ -4,7 +4,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from django.http import HttpResponse
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from joserfc import jwt
 from joserfc.jwk import RSAKey
 
@@ -209,11 +209,13 @@ class DashboardViewTests(TestCase):
             "sub": "user-123",
             "preferred_username": "lucas",
             "email": "lucas@example.com",
+            "groups": ["/security"],
             "resource_access": {
                 "django": {"roles": ["manager"]},
             },
         }
         access_token_claims.return_value = {
+            "groups": ["/security", "/operations"],
             "resource_access": {
                 "django": {"roles": ["pentester"]},
             },
@@ -227,6 +229,10 @@ class DashboardViewTests(TestCase):
             ["viewer", "manager", "pentester"],
         )
         self.assertEqual(
+            self.client.session["user"]["groups"],
+            ["/security", "/operations"],
+        )
+        self.assertEqual(
             self.client.session["id_token"],
             "header.payload.signature",
         )
@@ -237,6 +243,7 @@ class DashboardViewTests(TestCase):
             "sub": "user-123",
             "preferred_username": "lucas",
             "email": "lucas@example.com",
+            "groups": ["/security"],
             "resource_access": {
                 "django-app": {"roles": ["manager"]},
             },
@@ -247,12 +254,46 @@ class DashboardViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["roles"], ["manager"])
+        self.assertEqual(response.json()["groups"], ["/security"])
         self.assertIn("reports.export", response.json()["permissions"])
 
     def test_current_user_api_requires_authentication(self):
         response = self.client.get("/api/me/")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_user_can_open_each_assigned_role_dashboard(self):
+        session = self.client.session
+        session["user"] = {
+            "name": "Lucas",
+            "preferred_username": "lucas",
+            "roles": ["viewer", "analyst", "pentester", "admin"],
+            "groups": ["/security", "/administrators"],
+        }
+        session.save()
+
+        for role in ("viewer", "analyst", "pentester", "admin"):
+            with self.subTest(role=role):
+                response = self.client.get(f"/dashboards/{role}/")
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f"Dashboard {role.title()}")
+
+    def test_role_dashboard_rejects_user_without_required_role(self):
+        session = self.client.session
+        session["user"] = {
+            "preferred_username": "lucas",
+            "roles": ["viewer"],
+        }
+        session.save()
+
+        response = self.client.get("/dashboards/admin/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_role_dashboard_redirects_anonymous_user_to_login(self):
+        response = self.client.get("/dashboards/viewer/")
+
+        self.assertRedirects(response, "/login/", fetch_redirect_response=False)
 
     def test_export_requires_reports_export_permission(self):
         session = self.client.session
@@ -282,7 +323,7 @@ class DashboardViewTests(TestCase):
         session["id_token"] = "header.payload.signature"
         session.save()
 
-        response = self.client.get("/logout/")
+        response = self.client.post("/logout/")
         redirect_url = urlparse(response.url)
         query = parse_qs(redirect_url.query)
 
@@ -300,7 +341,7 @@ class DashboardViewTests(TestCase):
         session["user"] = {"preferred_username": "lucas"}
         session.save()
 
-        response = self.client.get("/logout/")
+        response = self.client.post("/logout/")
         query = parse_qs(urlparse(response.url).query)
 
         self.assertNotIn("id_token_hint", query)
@@ -310,13 +351,25 @@ class DashboardViewTests(TestCase):
         OIDC_POST_LOGOUT_REDIRECT_URI="https://app.example.com/logged-out/",
     )
     def test_logout_can_use_configured_public_redirect_uri(self):
-        response = self.client.get("/logout/")
+        response = self.client.post("/logout/")
         query = parse_qs(urlparse(response.url).query)
 
         self.assertEqual(
             query["post_logout_redirect_uri"],
             ["https://app.example.com/logged-out/"],
         )
+
+    def test_logout_rejects_get_requests(self):
+        response = self.client.get("/logout/")
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_logout_post_requires_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post("/logout/")
+
+        self.assertEqual(response.status_code, 403)
 
     def test_logged_out_page_is_public(self):
         response = self.client.get("/logged-out/")

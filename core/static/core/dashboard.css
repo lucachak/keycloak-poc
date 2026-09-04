@@ -31,7 +31,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .brand-mark span { position: absolute; border-radius: 8px 2px 8px 2px; background: linear-gradient(140deg, #968fff, #625bf6); }
 .brand-mark span:first-child { width: 17px; height: 10px; top: 2px; left: 2px; }
 .brand-mark span:last-child { width: 17px; height: 10px; bottom: 2px; right: 1px; }
-.main-nav { margin-top: 38px; }
+.main-nav { min-height: 0; margin-top: 38px; overflow-y: auto; flex: 1; scrollbar-width: thin; scrollbar-color: #353d55 transparent; }
 .nav-label { margin: 0 12px 10px; color: #6f7891; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
 .nav-label-spaced { margin-top: 28px; }
 .nav-item { width: 100%; height: 46px; margin: 3px 0; padding: 0 13px; border: 0; border-radius: 10px; display: flex; align-items: center; gap: 12px; color: #9ca6bd; background: transparent; font-size: 14px; font-weight: 500; cursor: pointer; transition: .2s ease; }
@@ -40,7 +40,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .nav-item > svg { width: 19px; height: 19px; }
 .nav-badge { margin-left: auto; min-width: 22px; padding: 3px 6px; border-radius: 20px; background: rgba(126,118,255,.22); color: #b9b4ff; font-size: 10px; font-weight: 700; text-align: center; }
 .nav-external { width: 14px!important; height: 14px!important; margin-left: auto; opacity: .6; }
-.sidebar-bottom { margin-top: auto; }
+.sidebar-bottom { margin-top: 14px; }
 .identity-mini { display: grid; grid-template-columns: 34px 1fr 7px; align-items: center; gap: 9px; margin: 0 2px 14px; padding: 13px 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(255,255,255,.04); }
 .identity-mini-icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: #aaa5ff; background: rgba(98,91,246,.19); }
 .identity-mini-icon svg { width: 17px; }
@@ -48,6 +48,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .identity-mini strong { font-size: 12px; }.identity-mini span { color: #778199; font-size: 9px; white-space: nowrap; }
 .identity-mini > i { width: 7px; height: 7px; border-radius: 50%; background: #39d99a; box-shadow: 0 0 0 4px rgba(57,217,154,.08); }
 .logout-link { color: #8d96aa; }
+.logout-form { margin: 0; }
 .sidebar-close { display: none!important; margin-left: auto; color: white!important; background: rgba(255,255,255,.06)!important; }
 
 .main-content { min-height: 100vh; margin-left: var(--sidebar); }

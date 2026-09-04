@@ -53,6 +53,20 @@ A dashboard inclui um exemplo real em `/api/reports/export/`. Mesmo que alguém
 tente chamar o endpoint diretamente, a operação retorna HTTP 403 quando o
 usuário não possui `reports.export`.
 
+## Dashboards por role
+
+Depois do login, a central mostra somente as áreas correspondentes às roles
+verificadas do usuário:
+
+- `/dashboards/viewer/`
+- `/dashboards/analyst/`
+- `/dashboards/pentester/`
+- `/dashboards/admin/`
+
+Cada rota também valida a role no backend; esconder o link no menu não é usado
+como mecanismo de autorização. Os grupos normalizados aparecem em `/api/me/` e
+no painel de contexto das páginas.
+
 ## Executando
 
 ```bash
@@ -130,6 +144,10 @@ OIDC_LOG_ROLE_CLAIMS=false
 O logout encerra primeiro a sessão Django e depois redireciona o navegador para
 o endpoint de RP-Initiated Logout do Keycloak. O `id_token_hint` evita uma etapa
 de confirmação e o usuário retorna para `/logged-out/`.
+
+A rota local `/logout/` aceita somente `POST` com proteção CSRF. O formulário
+preserva o `id_token_hint`, limpa toda a sessão Django e então inicia o logout
+OIDC no navegador.
 
 No client `django-app`, configure em **Settings → Login settings**:
 

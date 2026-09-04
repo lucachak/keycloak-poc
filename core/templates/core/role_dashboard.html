@@ -1,0 +1,94 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#11182b">
+    <title>{{ role_dashboard.label }} — Orbit</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'core/role_dashboard.css' %}">
+</head>
+<body class="theme-{{ role_dashboard.accent }}">
+    <div class="role-shell">
+        <aside class="role-sidebar">
+            <a class="role-brand" href="/"><span><i></i><i></i></span>orbit</a>
+            <p class="role-nav-label">Áreas disponíveis</p>
+            <nav aria-label="Áreas por role">
+                {% for area in role_areas %}
+                <a href="{{ area.url }}" class="role-nav-item {% if area.slug == role_slug %}is-active{% endif %}">
+                    <span>{{ area.label|slice:":1" }}</span>
+                    <div><strong>{{ area.label }}</strong><small>{{ area.kicker }}</small></div>
+                </a>
+                {% endfor %}
+            </nav>
+            <div class="role-sidebar-footer">
+                <a href="/">← Voltar à central</a>
+                <form method="post" action="/logout/">{% csrf_token %}<button type="submit">Sair da conta</button></form>
+            </div>
+        </aside>
+
+        <main class="role-main">
+            <header class="role-topbar">
+                <div class="mobile-actions"><a href="/">← Central</a><form method="post" action="/logout/">{% csrf_token %}<button type="submit">Sair</button></form></div>
+                <div class="role-user">
+                    <span>{{ user.name|default:user.username|slice:":1" }}</span>
+                    <div><strong>{{ user.name|default:user.username }}</strong><small>@{{ user.username }}</small></div>
+                </div>
+            </header>
+
+            <div class="role-content">
+                <section class="role-hero">
+                    <div>
+                        <p class="role-kicker"><i></i>{{ role_dashboard.kicker }}</p>
+                        <h1>Dashboard {{ role_dashboard.label }}</h1>
+                        <p>{{ role_dashboard.description }}</p>
+                    </div>
+                    <span class="role-status"><i></i> Role verificada</span>
+                </section>
+
+                <section class="role-metrics" aria-label="Resumo de acesso">
+                    <article><span>Role atual</span><strong>{{ role_dashboard.label }}</strong><small>Concedida pelo Keycloak</small></article>
+                    <article><span>Permissões efetivas</span><strong>{{ access.permission_count }}</strong><small>Aplicadas pelo Django</small></article>
+                    <article><span>Grupos vinculados</span><strong>{{ groups|length }}</strong><small>Recebidos nos claims OIDC</small></article>
+                </section>
+
+                <section class="role-grid">
+                    <div class="role-capabilities">
+                        <div class="section-heading"><div><span>Workspace</span><h2>Recursos da área</h2></div><em>{{ role_dashboard.sections|length }} módulos</em></div>
+                        <div class="capability-list">
+                            {% for section in role_dashboard.sections %}
+                            <article class="capability-card {% if not section.enabled %}is-disabled{% endif %}">
+                                <span class="capability-number">0{{ forloop.counter }}</span>
+                                <div><h3>{{ section.title }}</h3><p>{{ section.description }}</p><code>{{ section.permission }}</code></div>
+                                <i>{% if section.enabled %}Liberado{% else %}Bloqueado{% endif %}</i>
+                            </article>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <aside class="role-context">
+                        <div class="section-heading"><div><span>Identidade</span><h2>Contexto de acesso</h2></div></div>
+                        <dl>
+                            <div><dt>Usuário</dt><dd>{{ user.name|default:user.username }}</dd></div>
+                            <div><dt>E-mail</dt><dd>{{ user.email|default:"Não informado" }}</dd></div>
+                            <div><dt>Role selecionada</dt><dd><b>{{ role_dashboard.label }}</b></dd></div>
+                        </dl>
+                        <div class="group-block">
+                            <span>Grupos</span>
+                            <div>{% for group in groups %}<em>{{ group }}</em>{% empty %}<small>Nenhum grupo informado no token</small>{% endfor %}</div>
+                        </div>
+                        <div class="context-actions">
+                            <a href="/api/me/">Ver identidade em JSON</a>
+                            {% if access.can_export_reports %}<a href="/api/reports/export/">Exportar acessos</a>{% endif %}
+                            <a href="{{ keycloak_account_url }}" target="_blank" rel="noopener">Gerenciar no Keycloak ↗</a>
+                        </div>
+                    </aside>
+                </section>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

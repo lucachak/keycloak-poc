@@ -46,12 +46,14 @@
                 <button class="nav-item" type="button" data-view-target="profile"><svg><use href="#i-user"></use></svg><span>Meu perfil</span></button>
                 <button class="nav-item" type="button" data-view-target="access"><svg><use href="#i-lock"></use></svg><span>Acessos</span><span class="nav-badge">{{ access.role_count }}</span></button>
                 <button class="nav-item" type="button" data-view-target="activity"><svg><use href="#i-activity"></use></svg><span>Atividades</span><span class="nav-badge">4</span></button>
+                {% if role_areas %}<p class="nav-label nav-label-spaced">Áreas por role</p>{% endif %}
+                {% for area in role_areas %}<a class="nav-item" href="{{ area.url }}"><svg><use href="#i-grid"></use></svg><span>{{ area.label }}</span><svg class="nav-external"><use href="#i-chevron"></use></svg></a>{% endfor %}
                 <p class="nav-label nav-label-spaced">Conta</p>
                 <a class="nav-item" href="{{ keycloak_account_url }}" target="_blank" rel="noopener"><svg><use href="#i-shield"></use></svg><span>Segurança</span><svg class="nav-external"><use href="#i-external"></use></svg></a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="identity-mini"><div class="identity-mini-icon"><svg><use href="#i-shield"></use></svg></div><div><strong>Keycloak</strong><span>Identidade conectada</span></div><i title="Conectado"></i></div>
-                <a class="nav-item logout-link" href="/logout/"><svg><use href="#i-login"></use></svg><span>Sair da conta</span></a>
+                <form class="logout-form" method="post" action="/logout/">{% csrf_token %}<button class="nav-item logout-link" type="submit"><svg><use href="#i-login"></use></svg><span>Sair da conta</span></button></form>
             </div>
         </aside>
 
