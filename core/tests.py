@@ -148,9 +148,11 @@ class DashboardViewTests(TestCase):
         cls.public_url.stop()
         cls.env.stop()
 
-    def test_anonymous_user_is_redirected_to_login(self):
+    def test_anonymous_user_sees_public_landing_page(self):
         response = self.client.get("/")
-        self.assertRedirects(response, "/login/", fetch_redirect_response=False)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Entrar com Keycloak")
 
     @override_settings(APP_PUBLIC_URL="https://app.example.com")
     def test_login_uses_configured_public_callback_uri(self):

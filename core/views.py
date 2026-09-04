@@ -137,7 +137,7 @@ def index(request):
     user = request.session.get("user")
 
     if not user:
-        return redirect("/login/")
+        return render(request, "core/public.html")
 
     # Older sessions may only contain Keycloak's preferred_username claim.
     user = dict(user)

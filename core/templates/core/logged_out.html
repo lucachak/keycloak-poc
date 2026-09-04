@@ -2,37 +2,21 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#10162a">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#f3f1ea">
     <title>Sessão encerrada — Orbit</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'core/dashboard.css' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'core/orbit.css' %}">
 </head>
 <body class="logout-page">
-    <main class="logout-shell">
-        <section class="logout-card">
-            <div class="logout-brand"><span class="brand-mark"><span></span><span></span></span><strong>orbit</strong></div>
-            <div class="logout-success">
-                <span>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
-                </span>
-            </div>
-            <p class="logout-kicker">Logout concluído</p>
-            <h1>Sessão encerrada<br>com segurança.</h1>
-            <p class="logout-description">Sua sessão local e a sessão SSO do Keycloak foram finalizadas. Até a próxima!</p>
-            <a class="logout-login" href="/login/">
-                Entrar novamente
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
-            </a>
-            <div class="logout-provider">
-                <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.4c0 4.7 3.2 8.7 7.5 9.8 4.3-1.1 7.5-5.1 7.5-9.8V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
-                <p><strong>Identidade protegida</strong><small>Logout OpenID Connect via Keycloak</small></p>
-            </div>
+    <header class="logout-header"><a class="wordmark" href="/">Orbit <sup>ID</sup></a><span>OpenID Connect / Sessão finalizada</span></header>
+    <main class="logout-main">
+        <section class="logout-copy">
+            <p class="mono-label"><span class="live-dot"></span> Logout concluído</p>
+            <h1>Sessão<br><em>encerrada.</em></h1>
+            <div><p class="logout-description">Sua sessão local e a sessão SSO do Keycloak foram finalizadas com segurança. Nenhum acesso permanece ativo neste navegador.</p><a class="button button-dark" href="/login/">Entrar novamente <span>↗</span></a></div>
         </section>
-        <p class="logout-footer">Orbit Identity Workspace · Acesso seguro</p>
+        <aside class="logout-art" aria-label="Identidade protegida"><span class="logout-check">✓</span><p>Identidade protegida / Keycloak</p></aside>
     </main>
 </body>
 </html>
