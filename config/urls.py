@@ -11,5 +11,7 @@ urlpatterns = [
     path("login/", views.login_view),
     path("auth/callback/", views.callback),
     path("logout/", views.logout_view),
+    path("logged-out/", views.logged_out),
+    path("api/reports/export/", views.export_report),
     path("health/", views.health),
     ]

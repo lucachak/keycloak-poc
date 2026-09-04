@@ -8,12 +8,13 @@ oauth = OAuth()
 PUBLIC_URL = os.environ["KEYCLOAK_PUBLIC_URL"]
 INTERNAL_URL = os.environ["KEYCLOAK_INTERNAL_URL"]
 REALM = os.environ["KEYCLOAK_REALM"]
+CLIENT_ID = os.environ["KEYCLOAK_CLIENT_ID"]
 
 
 oauth.register(
     name="keycloak",
 
-    client_id=os.environ["KEYCLOAK_CLIENT_ID"],
+    client_id=CLIENT_ID,
     client_secret=os.environ["KEYCLOAK_CLIENT_SECRET"],
 
     authorize_url=(

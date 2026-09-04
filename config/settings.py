@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -116,6 +117,35 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Authorization roles are read from the OIDC claims. Extra mappings can be
+# added here without coupling the application to a specific identity provider.
+OIDC_CLIENT_ID = os.environ.get('KEYCLOAK_CLIENT_ID', 'django-app')
+OIDC_POST_LOGOUT_REDIRECT_URI = os.environ.get(
+    'KEYCLOAK_POST_LOGOUT_REDIRECT_URI',
+)
+RBAC_ROLE_PERMISSIONS = {}
+OIDC_LOG_ROLE_CLAIMS = os.environ.get(
+    'OIDC_LOG_ROLE_CLAIMS',
+    str(DEBUG),
+).lower() in {'1', 'true', 'yes', 'on'}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'core': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 
 # Email

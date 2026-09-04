@@ -35,6 +35,7 @@ services:
       KEYCLOAK_REALM: "lab"
       KEYCLOAK_CLIENT_ID: "django-app"
       KEYCLOAK_CLIENT_SECRET: "${KEYCLOAK_CLIENT_SECRET}"
+      KEYCLOAK_POST_LOGOUT_REDIRECT_URI: "http://localhost:8000/logged-out/"
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
